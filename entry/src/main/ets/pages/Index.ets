@@ -18,6 +18,8 @@ struct Index {
   private timeoutEnabled: boolean = false;
   private timeoutSeconds: number = 60;
   private timerId: number = -1;
+  private animFrameId: number = -1;
+  private boardReady: boolean = false;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
@@ -55,6 +57,7 @@ struct Index {
 
   initGame(): void {
     this.stopTimer();
+    this.stopAnimation();
     this.board = [];
     for (let i = 0; i < this.BOARD_SIZE; i++) {
       this.board[i] = [];
@@ -89,15 +92,15 @@ struct Index {
   }
 
   refreshBoard(): void {
-    this.drawBoard();
+    if (this.boardReady) {
+      this.drawBoard();
+    }
   }
 
   drawBoard(): void {
     let ctx = this.context;
     let boardWidth = this.CELL_SIZE * (this.BOARD_SIZE - 1) + this.PADDING * 2;
     let boardHeight = boardWidth;
-
-    ctx.clearRect(0, 0, boardWidth, boardHeight);
 
     ctx.fillStyle = '#DEB887';
     ctx.fillRect(0, 0, boardWidth, boardHeight);
@@ -375,17 +378,70 @@ struct Index {
       return;
     }
 
-    this.board[col][row] = this.aiColor;
-    this.drawBoard();
+    this.animateAiPiece(col, row);
+  }
 
-    if (this.checkWin(col, row)) {
-      this.gameOver = true;
-      this.statusText = 'AI 赢了！';
-    } else {
-      this.currentPlayer = this.humanColor;
-      this.statusText = '你的回合';
-      this.startTimer();
+  stopAnimation(): void {
+    if (this.animFrameId !== -1) {
+      clearInterval(this.animFrameId);
+      this.animFrameId = -1;
     }
+  }
+
+  animateAiPiece(col: number, row: number): void {
+    this.stopAnimation();
+    let cx = this.PADDING + col * this.CELL_SIZE;
+    let cy = this.PADDING + row * this.CELL_SIZE;
+    let maxR = this.CELL_SIZE / 2 - 1;
+    let totalFrames = 12;
+    let frameIndex = 0;
+
+    this.animFrameId = setInterval(() => {
+      this.drawBoard();
+      let ctx = this.context;
+      let progress = frameIndex / totalFrames;
+      let scale = Math.sin(progress * Math.PI * 0.5);
+
+      ctx.globalAlpha = 0.3 + 0.7 * progress;
+      ctx.beginPath();
+      ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+      ctx.fillStyle = '#4A90D9';
+      ctx.fill();
+
+      let r = maxR * scale;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      if (this.aiColor === 1) {
+        ctx.fillStyle = '#000000';
+      } else {
+        ctx.fillStyle = '#FFFFFF';
+      }
+      ctx.fill();
+      if (this.aiColor === 2) {
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
+      frameIndex++;
+
+      if (frameIndex > totalFrames) {
+        this.stopAnimation();
+        this.board[col][row] = this.aiColor;
+        this.drawBoard();
+
+        if (this.checkWin(col, row)) {
+          this.gameOver = true;
+          this.statusText = 'AI 赢了！';
+        } else {
+          this.currentPlayer = this.humanColor;
+          this.statusText = '你的回合';
+          this.startTimer();
+        }
+      }
+    }, 40);
   }
 
   triggerAiMove(): void {
@@ -423,6 +479,7 @@ struct Index {
     if (this.gameOver) {
       return;
     }
+    this.stopAnimation();
     this.gameOver = true;
     this.statusText = '超时，你输了！';
   }
@@ -433,25 +490,21 @@ struct Index {
         Text(this.statusText)
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
-          .margin({ top: 16, bottom: 4 })
           .fontColor(this.gameOver ? (this.statusText.includes('AI') || this.statusText.includes('超时') ? '#CC6600' : '#339933') : '#333333')
+          .height(32)
+          .textAlign(TextAlign.Center)
 
-        if (this.showTimer) {
-          Text(`剩余 ${this.remainingSeconds}s`)
-            .fontSize(14)
-            .fontColor(this.remainingSeconds <= 10 ? '#CC0000' : '#999999')
-            .margin({ bottom: 6 })
-        } else {
-          Text('')
-            .fontSize(14)
-            .height(0)
-            .margin({ bottom: 4 })
-        }
+        Text(this.showTimer ? `剩余 ${this.remainingSeconds}s` : '')
+          .fontSize(14)
+          .fontColor(this.remainingSeconds <= 10 ? '#CC0000' : '#999999')
+          .height(20)
+          .textAlign(TextAlign.Center)
 
         Canvas(this.context)
           .width(this.CELL_SIZE * (this.BOARD_SIZE - 1) + this.PADDING * 2)
           .height(this.CELL_SIZE * (this.BOARD_SIZE - 1) + this.PADDING * 2)
           .onReady(() => {
+            this.boardReady = true;
             this.drawBoard();
           })
           .onClick((event: ClickEvent) => {
@@ -459,7 +512,7 @@ struct Index {
           })
 
         Button('重新开始')
-          .margin({ top: 20 })
+          .margin({ top: 16 })
           .fontSize(18)
           .backgroundColor('#4A90D9')
           .fontColor(Color.White)
@@ -472,6 +525,7 @@ struct Index {
       .width('100%')
       .height('100%')
       .justifyContent(FlexAlign.Center)
+      .padding({ top: 12, bottom: 12 })
 
       Button() {
         Text('⚙')
