@@ -5,6 +5,8 @@ import router from '@ohos.router';
 struct Settings {
   @State humanFirst: boolean = true;
   @State humanColor: number = 1;
+  @State enableTimeout: boolean = false;
+  @State timeoutSeconds: number = 60;
 
   aboutToAppear(): void {
     let first = AppStorage.get<string>('gomoku_human_first');
@@ -19,17 +21,29 @@ struct Settings {
     } else {
       this.humanColor = 1;
     }
+    let to = AppStorage.get<string>('gomoku_enable_timeout');
+    if (to === 'true') {
+      this.enableTimeout = true;
+    } else {
+      this.enableTimeout = false;
+    }
+    let sec = AppStorage.get<string>('gomoku_timeout_seconds');
+    if (sec !== undefined && sec !== null && sec !== '') {
+      let val = parseInt(sec);
+      if (val >= 10 && val <= 180) {
+        this.timeoutSeconds = val;
+      }
+    }
   }
 
   build() {
     Column() {
       Row() {
-        Text('◁')
-          .fontSize(22)
-          .fontColor('#333333')
-          .width(40)
-          .height(40)
-          .textAlign(TextAlign.Center)
+        Button('← 返回')
+          .fontSize(16)
+          .fontColor('#4A90D9')
+          .backgroundColor(Color.Transparent)
+          .padding({ left: 0, right: 12, top: 8, bottom: 8 })
           .onClick(() => {
             router.back();
           })
@@ -37,7 +51,6 @@ struct Settings {
         Text('游戏设置')
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
-          .margin({ left: 8 })
 
         Blank()
       }
@@ -115,6 +128,58 @@ struct Settings {
       .borderRadius(12)
       .margin({ left: 16, right: 16, top: 16 })
 
+      Column() {
+        Row() {
+          Text('单回合超时')
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+
+          Blank()
+
+          Toggle({ type: ToggleType.Switch, isOn: this.enableTimeout })
+            .onChange((isOn: boolean) => {
+              this.enableTimeout = isOn;
+            })
+        }
+        .width('100%')
+        .margin({ bottom: this.enableTimeout ? 16 : 0 })
+
+        if (this.enableTimeout) {
+          Row() {
+            Text('超时时间')
+              .fontSize(16)
+              .fontColor('#666666')
+
+            Text(`${this.timeoutSeconds} 秒`)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#4A90D9')
+              .margin({ left: 12 })
+          }
+          .width('100%')
+          .margin({ bottom: 8 })
+
+          Slider({
+            value: this.timeoutSeconds,
+            min: 10,
+            max: 180,
+            step: 5
+          })
+            .width('100%')
+            .trackColor('#4A90D9')
+            .selectedColor('#4A90D9')
+            .showSteps(true)
+            .onChange((value: number) => {
+              this.timeoutSeconds = value;
+            })
+        }
+      }
+      .width('100%')
+      .padding({ left: 24, right: 24, top: 16, bottom: 16 })
+      .backgroundColor(Color.White)
+      .borderRadius(12)
+      .margin({ left: 16, right: 16, top: 16 })
+
       Blank()
 
       Button('保存配置')
@@ -128,6 +193,8 @@ struct Settings {
         .onClick(() => {
           AppStorage.setOrCreate('gomoku_human_first', this.humanFirst ? 'true' : 'false');
           AppStorage.setOrCreate('gomoku_human_color', this.humanColor === 1 ? '1' : '2');
+          AppStorage.setOrCreate('gomoku_enable_timeout', this.enableTimeout ? 'true' : 'false');
+          AppStorage.setOrCreate('gomoku_timeout_seconds', this.timeoutSeconds.toString());
           router.back();
         })
     }

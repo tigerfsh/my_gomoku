@@ -5,6 +5,8 @@ import router from '@ohos.router';
 struct Index {
   @State statusText: string = '你的回合';
   @State gameOver: boolean = false;
+  @State remainingSeconds: number = 0;
+  @State showTimer: boolean = false;
 
   private board: number[][] = [];
   private currentPlayer: number = 1;
@@ -13,6 +15,9 @@ struct Index {
   private readonly BOARD_SIZE: number = 15;
   private readonly CELL_SIZE: number = 22;
   private readonly PADDING: number = 16;
+  private timeoutEnabled: boolean = false;
+  private timeoutSeconds: number = 60;
+  private timerId: number = -1;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
@@ -23,6 +28,7 @@ struct Index {
   }
 
   onPageShow(): void {
+    this.stopTimer();
     this.loadConfig();
     this.initGame();
   }
@@ -36,9 +42,19 @@ struct Index {
       this.humanColor = 1;
       this.aiColor = 2;
     }
+    let to = AppStorage.get<string>('gomoku_enable_timeout');
+    this.timeoutEnabled = to === 'true';
+    let sec = AppStorage.get<string>('gomoku_timeout_seconds');
+    if (sec !== undefined && sec !== null && sec !== '') {
+      let val = parseInt(sec);
+      if (val >= 10 && val <= 180) {
+        this.timeoutSeconds = val;
+      }
+    }
   }
 
   initGame(): void {
+    this.stopTimer();
     this.board = [];
     for (let i = 0; i < this.BOARD_SIZE; i++) {
       this.board[i] = [];
@@ -56,6 +72,8 @@ struct Index {
 
     if (this.currentPlayer === this.aiColor) {
       this.triggerAiMove();
+    } else {
+      this.startTimer();
     }
   }
 
@@ -96,17 +114,6 @@ struct Index {
       ctx.moveTo(this.PADDING + i * this.CELL_SIZE, this.PADDING);
       ctx.lineTo(this.PADDING + i * this.CELL_SIZE, this.PADDING + (this.BOARD_SIZE - 1) * this.CELL_SIZE);
       ctx.stroke();
-    }
-
-    ctx.fillStyle = '#333333';
-    let starSpots = [3, 7, 11];
-    for (let si = 0; si < starSpots.length; si++) {
-      for (let sj = 0; sj < starSpots.length; sj++) {
-        ctx.beginPath();
-        ctx.arc(this.PADDING + starSpots[si] * this.CELL_SIZE,
-          this.PADDING + starSpots[sj] * this.CELL_SIZE, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
     }
 
     for (let i = 0; i < this.BOARD_SIZE; i++) {
@@ -155,6 +162,7 @@ struct Index {
       return;
     }
 
+    this.stopTimer();
     this.board[col][row] = this.humanColor;
     this.drawBoard();
 
@@ -376,6 +384,7 @@ struct Index {
     } else {
       this.currentPlayer = this.humanColor;
       this.statusText = '你的回合';
+      this.startTimer();
     }
   }
 
@@ -385,14 +394,59 @@ struct Index {
     }, 300);
   }
 
+  startTimer(): void {
+    if (!this.timeoutEnabled || this.gameOver) {
+      this.showTimer = false;
+      return;
+    }
+    this.stopTimer();
+    this.remainingSeconds = this.timeoutSeconds;
+    this.showTimer = true;
+    this.timerId = setInterval(() => {
+      this.remainingSeconds--;
+      if (this.remainingSeconds <= 0) {
+        this.stopTimer();
+        this.handleTimeout();
+      }
+    }, 1000);
+  }
+
+  stopTimer(): void {
+    this.showTimer = false;
+    if (this.timerId !== -1) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
+  }
+
+  handleTimeout(): void {
+    if (this.gameOver) {
+      return;
+    }
+    this.gameOver = true;
+    this.statusText = '超时，你输了！';
+  }
+
   build() {
     Stack() {
       Column() {
         Text(this.statusText)
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
-          .margin({ top: 16, bottom: 10 })
-          .fontColor(this.gameOver ? (this.statusText.includes('AI') ? '#CC6600' : '#339933') : '#333333')
+          .margin({ top: 16, bottom: 4 })
+          .fontColor(this.gameOver ? (this.statusText.includes('AI') || this.statusText.includes('超时') ? '#CC6600' : '#339933') : '#333333')
+
+        if (this.showTimer) {
+          Text(`剩余 ${this.remainingSeconds}s`)
+            .fontSize(14)
+            .fontColor(this.remainingSeconds <= 10 ? '#CC0000' : '#999999')
+            .margin({ bottom: 6 })
+        } else {
+          Text('')
+            .fontSize(14)
+            .height(0)
+            .margin({ bottom: 4 })
+        }
 
         Canvas(this.context)
           .width(this.CELL_SIZE * (this.BOARD_SIZE - 1) + this.PADDING * 2)
